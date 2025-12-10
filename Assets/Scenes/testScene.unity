@@ -497,6 +497,7 @@ MonoBehaviour:
     color: {r: 0, g: 0, b: 0, a: 0}
     emissionColor: {r: 1, g: 1, b: 1, a: 0}
     lightIntensity: 1
+    specularProbability: 0
 --- !u!1 &1253876897
 GameObject:
   m_ObjectHideFlags: 0
@@ -625,6 +626,7 @@ MonoBehaviour:
     color: {r: 0.3443396, g: 1, b: 0.4738877, a: 0}
     emissionColor: {r: 0, g: 0, b: 0, a: 0}
     lightIntensity: 0
+    specularProbability: 0
 --- !u!1 &1604524362
 GameObject:
   m_ObjectHideFlags: 0
@@ -753,6 +755,7 @@ MonoBehaviour:
     color: {r: 0.17986828, g: 0.6980085, b: 0.8867924, a: 0}
     emissionColor: {r: 0, g: 0, b: 0, a: 0}
     lightIntensity: 0
+    specularProbability: 0
 --- !u!1 &1626079845
 GameObject:
   m_ObjectHideFlags: 0
@@ -789,6 +792,7 @@ MonoBehaviour:
     color: {r: 0.9622642, g: 0.27687788, b: 0.27687788, a: 0}
     emissionColor: {r: 0.9245283, g: 0.10902455, b: 0.10902455, a: 0}
     lightIntensity: 0
+    specularProbability: 1
 --- !u!135 &1626079847
 SphereCollider:
   m_ObjectHideFlags: 0

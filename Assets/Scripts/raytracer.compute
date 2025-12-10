@@ -29,6 +29,7 @@ struct MaterialProperties
     float4 color;
     float4 EmissionColor;
     float lightIntensity;
+    float reflectance;
 };
 
 struct RayHit
@@ -167,13 +168,27 @@ float3 CosineSample(inout uint state, float3 N)
 }
 void diffuse(inout Ray payload, RayHit hitinfo, inout uint state)
 {
-
     float3 emittedLight = hitinfo.hitMaterial.EmissionColor.xyz * hitinfo.hitMaterial.lightIntensity;
     payload.luminance += payload.energy * emittedLight;
     
     payload.energy *= hitinfo.hitMaterial.color.xyz;
     
     payload.dir = CosineSample(state, hitinfo.normal);
+    
+    payload.origin = hitinfo.pos;
+}
+
+void Trace(inout Ray payload, RayHit hitinfo, inout uint state){
+
+    float3 specDir = reflect(payload.dir, hitinfo.normal);
+    float3 diffuseDir = CosineSample(state, hitinfo.normal);
+
+    float3 emittedLight = hitinfo.hitMaterial.EmissionColor.xyz * hitinfo.hitMaterial.lightIntensity;
+    payload.luminance += payload.energy * emittedLight;
+    
+    payload.energy *= hitinfo.hitMaterial.color.xyz;
+    
+    payload.dir = normalize(lerp(diffuseDir, specDir, hitinfo.hitMaterial.reflectance));
     
     payload.origin = hitinfo.pos;
 }
@@ -286,7 +301,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
                 break;
             }
         
-            diffuse(c_ray, current, rngState);
+            Trace(c_ray, current, rngState);
         
         }
         accumulation += c_ray.luminance;

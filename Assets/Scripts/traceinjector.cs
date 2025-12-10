@@ -100,16 +100,16 @@ public class traceinjector : MonoBehaviour
                 rtm = _rtMeshes[i].material
             };
         }
-        foreach(var v in vertices)
-        {
-            Debug.Log(v);
-        }
+        //foreach(var v in vertices)
+        //{
+        //    Debug.Log(v);
+        //}
 
-        foreach (var i in indices)
-        {
-            Debug.Log(i);
-        }
-        CreateComputeBuffer(ref _meshBuffer, new List<MeshObject>(_meshHandles), 108);
+        //foreach (var i in indices)
+        //{
+        //    Debug.Log(i);
+        //}
+        CreateComputeBuffer(ref _meshBuffer, new List<MeshObject>(_meshHandles), 112);
         CreateComputeBuffer(ref _vertexBuffer, vertices, 12);
         CreateComputeBuffer(ref _indexBuffer, indices, 4);
 
@@ -125,7 +125,7 @@ public class traceinjector : MonoBehaviour
 
             };
         }
-        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 52);
+        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 56);
 
     }
 
@@ -232,17 +232,36 @@ public class traceinjector : MonoBehaviour
         rayTracingShader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
         rayTracingShader.SetTexture(rtsIndex, "_SkyboxTexture", Skybox);
         rayTracingShader.SetTexture(rtsIndex, "Result", _target);
-        rayTracingShader.SetInt("StartSeed", 123456);
+        //rayTracingShader.SetInt("StartSeed", 123456);
         rayTracingShader.SetInt("numRays", RaysPerPixel);
         rayTracingShader.SetInt("numBounces", numBounces);
 
-        //rayTracingShader.SetInt("StartSeed", UnityEngine.Random.Range(0, 9999999));
+        rayTracingShader.SetInt("StartSeed", UnityEngine.Random.Range(0, 9999999));
     }
 
+    Material _taaMaterial = null;
+    float _currentSample = 0;
     private void render(RenderTexture destination)
     {
         rayTracingShader.Dispatch(rtsIndex, Mathf.CeilToInt(Screen.width / 8.0f), Mathf.CeilToInt(Screen.height / 8.0f), 1);
-        Graphics.Blit(_target, destination);
+        if (_taaMaterial == null)
+        {
+            _taaMaterial = new Material(Shader.Find("Hidden/AddShader"));
+        }
+        _taaMaterial.SetFloat("_Sample", _currentSample);
+        Graphics.Blit(_target, destination, _taaMaterial);
+        _currentSample++;
+    }
+
+
+    public bool accumulate = false;
+
+    private void Update()
+    {
+        if (!accumulate)
+        {
+            _currentSample = 0;
+        }
     }
 
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
