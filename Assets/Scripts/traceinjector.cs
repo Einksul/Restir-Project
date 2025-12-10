@@ -34,7 +34,9 @@ public class traceinjector : MonoBehaviour
     {
         public Vector3 pos;
         public float radius;
-        public int material;
+        public Vector3 color;
+        public Vector3 EmissionColor;
+        public float lightIntensity;
     };
     private Sphere[] _implicitsHandles;
     private ComputeBuffer _implicitsBuffer = null;
@@ -103,14 +105,18 @@ public class traceinjector : MonoBehaviour
         _implicitsHandles = new Sphere[_rtImplicits.Count];
         for (int i = 0; i < _rtImplicits.Count; i++)
         {
+            RayTracingMaterial material = _rtImplicits[i].material;
             _implicitsHandles[i] = new Sphere()
             {
                 pos = _rtImplicits[i].transform.position,
                 radius = _rtImplicits[i].transform.localScale.x,
-                material = 0
+                color = new Vector3(material.color.r, material.color.g, material.color.b),
+                EmissionColor = new Vector3(material.emissionColor.r, material.emissionColor.g, material.emissionColor.b),
+                lightIntensity = material.lightIntensity
+
             };
         }
-        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 20);
+        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 44);
 
     }
 

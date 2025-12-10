@@ -4,4 +4,5 @@
 [RequireComponent(typeof(MeshFilter))]
 public class RayTracingObject : MonoBehaviour
 {
+    public RayTracingMaterial material;
 }

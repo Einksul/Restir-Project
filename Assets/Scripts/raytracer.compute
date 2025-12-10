@@ -12,6 +12,7 @@ SamplerState sampler_SkyboxTexture;
 RWTexture2D<float4> Result;
 
 static const float PI = 3.14159265f;
+int StartSeed = 1293576;
 
 struct Ray{
     float3 luminance;
@@ -25,6 +26,9 @@ struct RayHit
     float3 pos;
     float distance;
     float3 normal;
+    float3 color;
+    float3 EmissionColor;
+    float lightIntensity;
 };
 
 struct DirectionalLight
@@ -36,7 +40,9 @@ struct Sphere
 {
     float3 pos;
     float radius;
-    int material;
+    float3 color;
+    float3 EmissionColor;
+    float lightIntensity;
 };
 
 StructuredBuffer<Sphere> spheres;
@@ -69,6 +75,9 @@ void IntersectSphere(Ray rei, Sphere sphere, inout RayHit toBeat)
         toBeat.distance = t;
         toBeat.pos = rei.origin + (t-0.001) * rei.dir;
         toBeat.normal = normalize(toBeat.pos - sphere.pos);
+        toBeat.color = sphere.color;
+        toBeat.EmissionColor = sphere.EmissionColor;
+        toBeat.lightIntensity = sphere.lightIntensity;
     }
     
 }
@@ -104,6 +113,70 @@ void specularMaterial(inout Ray payload, RayHit hitinfo)
     payload.origin = hitinfo.pos;
 }
 
+uint Hash(uint s)
+{
+    s = s ^ 61u ^ (s >> 16u);
+    s *= 9u;
+    s = s ^ (s >> 4u);
+    s *= 0x27d4eb2du;
+    s = s ^ (s >> 15u);
+    return s;
+}
+float Randn(inout uint seed)
+{
+    seed += 1u;
+    return float(Hash(seed)) / float(0xFFFFFFFFu); 
+}
+
+void Basis(float3 normal, out float3 T, out float3 B)
+{
+    if (abs(normal.z) < 0.999f) 
+    {
+        T = normalize(cross(float3(0, 0, 1), normal));
+    }
+    else
+    {
+        T = normalize(cross(float3(1, 0, 0), normal));
+    }
+    B = cross(normal, T);
+}
+
+float3 CosineSample(inout uint state, float3 N)
+{
+   
+    float R1 = Randn(state); 
+    float R2 = Randn(state); 
+
+    
+    float phi = 2.0 * PI * R1;
+    float cosTheta = sqrt(R2);
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    
+    float3 localDir = float3(
+        cos(phi) * sinTheta,
+        sin(phi) * sinTheta,
+        cosTheta
+    );
+
+    
+    float3 T, B;
+    Basis(N, T, B);
+    return T * localDir.x + B * localDir.y + N * localDir.z;
+}
+void diffuse(inout Ray payload, RayHit hitinfo, inout uint state)
+{
+
+    float3 emittedLight = hitinfo.EmissionColor * hitinfo.lightIntensity;
+    payload.luminance += payload.energy * emittedLight;
+    
+    payload.energy *= hitinfo.color;
+    
+    payload.dir = CosineSample(state, hitinfo.normal);
+    
+    payload.origin = hitinfo.pos;
+}
+
 void missShader(inout Ray payload)
 {
     float phi = acos(payload.dir.y) / -PI;
@@ -134,14 +207,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
     // rescale to [-1, 1] 
     float2 uv = float2((id.xy + float2(0.5, 0.5)) / float2(width, height) * 2.0f - 1.0f);
     Ray c_ray = CreateCameraRay(uv); 
-    
-    Sphere test;
-    test.pos = float3(5, 0, 0);
-    test.radius = 2;
-    
-    Sphere test2;
-    test2.pos = float3(5, 2, 2);
-    test2.radius = 1;
+    uint rngState = (id.x * 1973u) ^ (id.y * 9277u) ^ StartSeed;
     
     // megakernels considered harmful
     for (int i = 0; i < 8; i++)
@@ -163,7 +229,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
             break;
         }
         
-        specularMaterial(c_ray, current);
+        diffuse(c_ray, current, rngState);
         
     }
     
