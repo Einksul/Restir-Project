@@ -25,9 +25,9 @@ public class traceinjector : MonoBehaviour
         public int indexCount;
     };
     private MeshObject[] _meshHandles;
-    private ComputeBuffer _meshBuffer;
-    private ComputeBuffer _vertexBuffer;
-    private ComputeBuffer _indexBuffer;
+    private ComputeBuffer _meshBuffer = null;
+    private ComputeBuffer _vertexBuffer = null;
+    private ComputeBuffer _indexBuffer = null;
 
     private List<ImplicitObject> _rtImplicits = new List<ImplicitObject>();
     struct Sphere
@@ -37,7 +37,7 @@ public class traceinjector : MonoBehaviour
         public int material;
     };
     private Sphere[] _implicitsHandles;
-    private ComputeBuffer _implicitsBuffer;
+    private ComputeBuffer _implicitsBuffer = null;
 
     private bool geo_rebuild = true;
 
@@ -185,13 +185,13 @@ public class traceinjector : MonoBehaviour
 
     private void setShaderParameters()
     {
-        if(_indexBuffer == null)
+        if(_implicitsBuffer != null)
         {
             rayTracingShader.SetBuffer(rtsIndex, "spheres", _implicitsBuffer);
             rayTracingShader.SetInt("sphereCount", _implicitsBuffer.count);
         }
 
-        if (_meshBuffer == null)
+        if (_meshBuffer != null)
         {
             rayTracingShader.SetBuffer(rtsIndex, "meshes", _meshBuffer);
             rayTracingShader.SetBuffer(rtsIndex, "vertices", _vertexBuffer);
