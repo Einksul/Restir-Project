@@ -1,0 +1,172 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Raycast
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+Texture2D<float4> _SkyboxTexture;
+SamplerState sampler_SkyboxTexture;
+RWTexture2D<float4> Result;
+
+static const float PI = 3.14159265f;
+
+struct Ray{
+    float3 luminance;
+    float3 energy;
+    float3 origin;
+    float3 dir;
+};
+
+struct RayHit
+{
+    float3 pos;
+    float distance;
+    float3 normal;
+};
+
+struct DirectionalLight
+{
+    
+};
+
+struct Sphere
+{
+    float3 pos;
+    float radius;
+    int material;
+};
+
+StructuredBuffer<Sphere> spheres;
+int sphereCount;
+
+struct Mesh
+{
+    float4x4 transform;
+    int indexOffset;
+    int indexCount;
+};
+StructuredBuffer<Mesh> meshes;
+Buffer<float3> vertices;
+Buffer<int> indices;
+int meshCount;
+
+
+void IntersectSphere(Ray rei, Sphere sphere, inout RayHit toBeat)
+{
+    // Calculate distance along the ray where the sphere is intersected
+    float3 d = rei.origin - sphere.pos;
+    float p1 = -dot(rei.dir, d);
+    float p2sqr = p1 * p1 - dot(d, d) + sphere.radius * sphere.radius;
+    if (p2sqr < 0)
+        return;
+    float p2 = sqrt(p2sqr);
+    float t = p1 - p2 > 0 ? p1 - p2 : p1 + p2;
+    if (t > 0 && t < toBeat.distance)
+    {
+        toBeat.distance = t;
+        toBeat.pos = rei.origin + (t-0.001) * rei.dir;
+        toBeat.normal = normalize(toBeat.pos - sphere.pos);
+    }
+    
+}
+
+Ray CreateRay(float3 origin, float3 direction){
+    Ray adachi;
+    adachi.origin = origin;
+    adachi.dir = direction;
+    adachi.energy = float3(1,1,1);
+    adachi.luminance = float3(0,0,0);
+    
+    return adachi;
+}
+
+Ray CreateCameraRay(float2 uv)
+{
+    // Transform the camera origin to world space
+    float3 origin = mul(_CameraToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+    
+    // Invert the perspective projection of the view-space position
+    float3 direction = mul(_CameraInverseProjection, float4(uv, 0.0f, 1.0f)).xyz;
+    // Transform the direction from camera to world space and normalize
+    direction = mul(_CameraToWorld, float4(direction, 0.0f)).xyz;
+    direction = normalize(direction);
+
+    return CreateRay(origin, direction);
+}
+
+void specularMaterial(inout Ray payload, RayHit hitinfo)
+{
+    payload.energy *= 0.8;
+    payload.dir = reflect(payload.dir, hitinfo.normal);
+    payload.origin = hitinfo.pos;
+}
+
+void missShader(inout Ray payload)
+{
+    float phi = acos(payload.dir.y) / -PI;
+    float theta = atan2(payload.dir.x, -payload.dir.z) / -(2 * PI);
+    float3 skyboxSample = _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(theta, phi), 0).xyz;
+    payload.luminance += skyboxSample * payload.energy;
+}
+
+RayHit freshHit()
+{
+    RayHit newHit;
+    newHit.pos = float3(0, 0, 0);
+    newHit.normal = float3(0, 0, 0);
+    newHit.distance = 1.#INF;
+    return newHit;
+}
+
+[numthreads(8,8,1)] 
+void Raycast (uint3 id : SV_DispatchThreadID)
+{
+    // TODO: insert actual code here!
+    // convert id to uv
+    // createcameraray(uv.x uv.y)
+    // sample skybox accordingly
+    int width, height;
+    Result.GetDimensions(width, height);
+
+    // rescale to [-1, 1] 
+    float2 uv = float2((id.xy + float2(0.5, 0.5)) / float2(width, height) * 2.0f - 1.0f);
+    Ray c_ray = CreateCameraRay(uv); 
+    
+    Sphere test;
+    test.pos = float3(5, 0, 0);
+    test.radius = 2;
+    
+    Sphere test2;
+    test2.pos = float3(5, 2, 2);
+    test2.radius = 1;
+    
+    // megakernels considered harmful
+    for (int i = 0; i < 8; i++)
+    {
+        RayHit current = freshHit();
+        for (int j = 0; j < sphereCount; j++)
+        {
+            IntersectSphere(c_ray, spheres[j], current);
+        }
+        
+        if (current.distance >= 200)
+        {
+            missShader(c_ray);
+            break;
+        } 
+        
+        if (!any(c_ray.energy))
+        {
+            break;
+        }
+        
+        specularMaterial(c_ray, current);
+        
+    }
+    
+    Result[id.xy] = float4(c_ray.luminance, 1);
+
+}
