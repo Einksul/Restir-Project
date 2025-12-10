@@ -218,7 +218,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
             IntersectSphere(c_ray, spheres[j], current);
         }
         
-        if (current.distance >= 200)
+        if (current.distance >= 2000)
         {
             missShader(c_ray);
             break;
@@ -228,7 +228,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
         {
             break;
         }
-        
+        // specularMaterial(c_ray, current);
         diffuse(c_ray, current, rngState);
         
     }
