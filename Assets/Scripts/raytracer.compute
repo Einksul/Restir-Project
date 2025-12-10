@@ -12,7 +12,10 @@ SamplerState sampler_SkyboxTexture;
 RWTexture2D<float4> Result;
 
 static const float PI = 3.14159265f;
-int StartSeed = 1293576;
+static const float epsilon = 0.001;
+int StartSeed ;
+int numRays = 30;
+int numBounces = 1;
 
 struct Ray{
     float3 luminance;
@@ -21,28 +24,26 @@ struct Ray{
     float3 dir;
 };
 
+struct MaterialProperties
+{
+    float4 color;
+    float4 EmissionColor;
+    float lightIntensity;
+};
+
 struct RayHit
 {
     float3 pos;
     float distance;
     float3 normal;
-    float3 color;
-    float3 EmissionColor;
-    float lightIntensity;
-};
-
-struct DirectionalLight
-{
-    
+    MaterialProperties hitMaterial;
 };
 
 struct Sphere
 {
     float3 pos;
     float radius;
-    float3 color;
-    float3 EmissionColor;
-    float lightIntensity;
+    MaterialProperties material;
 };
 
 StructuredBuffer<Sphere> spheres;
@@ -53,7 +54,9 @@ struct Mesh
     float4x4 transform;
     int indexOffset;
     int indexCount;
+    MaterialProperties material;
 };
+
 StructuredBuffer<Mesh> meshes;
 Buffer<float3> vertices;
 Buffer<int> indices;
@@ -75,9 +78,7 @@ void IntersectSphere(Ray rei, Sphere sphere, inout RayHit toBeat)
         toBeat.distance = t;
         toBeat.pos = rei.origin + (t-0.001) * rei.dir;
         toBeat.normal = normalize(toBeat.pos - sphere.pos);
-        toBeat.color = sphere.color;
-        toBeat.EmissionColor = sphere.EmissionColor;
-        toBeat.lightIntensity = sphere.lightIntensity;
+        toBeat.hitMaterial = sphere.material;
     }
     
 }
@@ -167,10 +168,10 @@ float3 CosineSample(inout uint state, float3 N)
 void diffuse(inout Ray payload, RayHit hitinfo, inout uint state)
 {
 
-    float3 emittedLight = hitinfo.EmissionColor * hitinfo.lightIntensity;
+    float3 emittedLight = hitinfo.hitMaterial.EmissionColor.xyz * hitinfo.hitMaterial.lightIntensity;
     payload.luminance += payload.energy * emittedLight;
     
-    payload.energy *= hitinfo.color;
+    payload.energy *= hitinfo.hitMaterial.color.xyz;
     
     payload.dir = CosineSample(state, hitinfo.normal);
     
@@ -194,6 +195,54 @@ RayHit freshHit()
     return newHit;
 }
 
+void IntersectMesh(Ray ray, Mesh mesh, inout RayHit best)
+{
+    for (int i = mesh.indexOffset; i < mesh.indexCount; i+=3)
+    {
+        float3 t_a = mul(mesh.transform, float4(vertices[indices[i]], 1)).xyz;
+        float3 t_b = mul(mesh.transform, float4(vertices[indices[i+1]], 1)).xyz;
+        float3 t_c = mul(mesh.transform, float4(vertices[indices[i+2]], 1)).xyz;
+        
+        float3 edge1 = t_b - t_a;
+        float3 edge2 = t_c - t_a;
+        
+        float3 rayxe2 = cross(ray.dir, edge2);
+        float det = dot(edge1, rayxe2);
+        
+        if (det > -epsilon && det < epsilon)
+        {
+            continue;
+        }
+        
+        float inv_det = 1.0 / det;
+        float3 s = ray.origin - t_a;
+        float u = inv_det * dot(s, rayxe2);
+
+        if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u - 1) > epsilon))
+            continue;
+
+        float3 s_cross_e1 = cross(s, edge1);
+        float v = inv_det * dot(ray.dir, s_cross_e1);
+
+        if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
+            continue;
+
+    // At this stage we can compute t to find out where the intersection point is on the line.
+        float t = inv_det * dot(edge2, s_cross_e1);
+
+        if (t > epsilon && t < best.distance) // ray intersection
+        {
+            best.pos = ray.origin + ray.dir * t;
+            best.distance = t;
+            best.normal = normalize(cross(edge1, edge2));
+            best.hitMaterial = mesh.material;
+        }
+        else // This means that there is a line intersection but not a ray intersection.
+            continue;
+    }
+
+}
+
 [numthreads(8,8,1)] 
 void Raycast (uint3 id : SV_DispatchThreadID)
 {
@@ -203,36 +252,46 @@ void Raycast (uint3 id : SV_DispatchThreadID)
     // sample skybox accordingly
     int width, height;
     Result.GetDimensions(width, height);
-
-    // rescale to [-1, 1] 
-    float2 uv = float2((id.xy + float2(0.5, 0.5)) / float2(width, height) * 2.0f - 1.0f);
-    Ray c_ray = CreateCameraRay(uv); 
-    uint rngState = (id.x * 1973u) ^ (id.y * 9277u) ^ StartSeed;
     
-    // megakernels considered harmful
-    for (int i = 0; i < 8; i++)
-    {
-        RayHit current = freshHit();
-        for (int j = 0; j < sphereCount; j++)
+    uint rngState = (id.x * 1973u) ^ (id.y * 9277u) ^ StartSeed;
+    // rescale to [-1, 1] 
+    float3 accumulation = 0;
+    for (int num =0; num < numRays; num++){
+        float2 uv = float2((id.xy + float2(Randn(rngState), Randn(rngState))) / float2(width, height) * 2.0f - 1.0f);
+        Ray c_ray = CreateCameraRay(uv); 
+
+    
+        // megakernels considered harmful
+        for (int i = 0; i <= numBounces; i++)
         {
-            IntersectSphere(c_ray, spheres[j], current);
+            RayHit current = freshHit();
+            for (int j = 0; j < sphereCount; j++)
+            {
+                IntersectSphere(c_ray, spheres[j], current);
+            }
+        
+            for (int k = 0; k < meshCount; k++)
+            {
+                IntersectMesh(c_ray, meshes[k], current);
+            }
+        
+            if (current.distance >= 200)
+            {
+                missShader(c_ray);
+                break;
+            }
+        
+            if (length(c_ray.energy) < epsilon)
+            {
+                break;
+            }
+        
+            diffuse(c_ray, current, rngState);
+        
         }
-        
-        if (current.distance >= 2000)
-        {
-            missShader(c_ray);
-            break;
-        } 
-        
-        if (!any(c_ray.energy))
-        {
-            break;
-        }
-        // specularMaterial(c_ray, current);
-        diffuse(c_ray, current, rngState);
-        
+        accumulation += c_ray.luminance;
     }
     
-    Result[id.xy] = float4(c_ray.luminance, 1);
+    Result[id.xy] = float4(accumulation/numRays, 1);
 
 }

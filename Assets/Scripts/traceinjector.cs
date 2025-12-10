@@ -1,9 +1,11 @@
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 using static UnityEngine.GraphicsBuffer;
+using System.Runtime.InteropServices;
 
 public class traceinjector : MonoBehaviour
 {
@@ -11,18 +13,20 @@ public class traceinjector : MonoBehaviour
     public Texture Skybox;
     // add material kernels
     // add raycast kernels
+    public int RaysPerPixel;
+    public int numBounces;
 
     private RenderTexture _target;
     private int rtsIndex;
     Camera _camera;
 
     private List<RayTracingObject> _rtMeshes = new List<RayTracingObject>();
-
     struct MeshObject
     {
         public Matrix4x4 transform;
         public int indexOffset;
         public int indexCount;
+        public RayTracingMaterial rtm;
     };
     private MeshObject[] _meshHandles;
     private ComputeBuffer _meshBuffer = null;
@@ -34,9 +38,7 @@ public class traceinjector : MonoBehaviour
     {
         public Vector3 pos;
         public float radius;
-        public Vector3 color;
-        public Vector3 EmissionColor;
-        public float lightIntensity;
+        public RayTracingMaterial rtm;
     };
     private Sphere[] _implicitsHandles;
     private ComputeBuffer _implicitsBuffer = null;
@@ -94,11 +96,20 @@ public class traceinjector : MonoBehaviour
             {
                 transform = _rtMeshes[i].transform.localToWorldMatrix,
                 indexOffset = firstIndex,
-                indexCount = indices.Count
+                indexCount = indices.Count,
+                rtm = _rtMeshes[i].material
             };
         }
+        foreach(var v in vertices)
+        {
+            Debug.Log(v);
+        }
 
-        CreateComputeBuffer(ref _meshBuffer, new List<MeshObject>(_meshHandles), 72);
+        foreach (var i in indices)
+        {
+            Debug.Log(i);
+        }
+        CreateComputeBuffer(ref _meshBuffer, new List<MeshObject>(_meshHandles), 108);
         CreateComputeBuffer(ref _vertexBuffer, vertices, 12);
         CreateComputeBuffer(ref _indexBuffer, indices, 4);
 
@@ -110,13 +121,11 @@ public class traceinjector : MonoBehaviour
             {
                 pos = _rtImplicits[i].transform.position,
                 radius = _rtImplicits[i].transform.localScale.x,
-                color = new Vector3(material.color.r, material.color.g, material.color.b),
-                EmissionColor = new Vector3(material.emissionColor.r, material.emissionColor.g, material.emissionColor.b),
-                lightIntensity = material.lightIntensity
+                rtm = material
 
             };
         }
-        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 44);
+        CreateComputeBuffer(ref _implicitsBuffer, new List<Sphere>(_implicitsHandles), 52);
 
     }
 
@@ -194,7 +203,11 @@ public class traceinjector : MonoBehaviour
         if(_implicitsBuffer != null)
         {
             rayTracingShader.SetBuffer(rtsIndex, "spheres", _implicitsBuffer);
-            rayTracingShader.SetInt("sphereCount", _implicitsBuffer.count);
+            rayTracingShader.SetInt("sphereCount", _implicitsHandles.Length);
+        }
+        else
+        {
+            rayTracingShader.SetInt("sphereCount", 0);
         }
 
         if (_meshBuffer != null)
@@ -202,12 +215,28 @@ public class traceinjector : MonoBehaviour
             rayTracingShader.SetBuffer(rtsIndex, "meshes", _meshBuffer);
             rayTracingShader.SetBuffer(rtsIndex, "vertices", _vertexBuffer);
             rayTracingShader.SetBuffer(rtsIndex, "indices", _indexBuffer);
+            rayTracingShader.SetInt("meshCount", _meshHandles.Length);
+        }
+        else
+        {
+            ComputeBuffer meshBuffer = new ComputeBuffer(1, Marshal.SizeOf(typeof(MeshObject)));
+            rayTracingShader.SetBuffer(rtsIndex, "meshes", meshBuffer);
+            ComputeBuffer vbuffer = new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector3)));
+            rayTracingShader.SetBuffer(rtsIndex, "vertices", meshBuffer);
+            ComputeBuffer ibuffer = new ComputeBuffer(1, Marshal.SizeOf(typeof(int)));
+            rayTracingShader.SetBuffer(rtsIndex, "indices", meshBuffer);
+            rayTracingShader.SetInt("meshCount", 0);
         }
 
         rayTracingShader.SetMatrix("_CameraToWorld", _camera.cameraToWorldMatrix);
         rayTracingShader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
         rayTracingShader.SetTexture(rtsIndex, "_SkyboxTexture", Skybox);
         rayTracingShader.SetTexture(rtsIndex, "Result", _target);
+        rayTracingShader.SetInt("StartSeed", 123456);
+        rayTracingShader.SetInt("numRays", RaysPerPixel);
+        rayTracingShader.SetInt("numBounces", numBounces);
+
+        //rayTracingShader.SetInt("StartSeed", UnityEngine.Random.Range(0, 9999999));
     }
 
     private void render(RenderTexture destination)

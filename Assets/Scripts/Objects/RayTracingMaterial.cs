@@ -2,7 +2,7 @@ using UnityEngine;
 using System;
 
 [System.Serializable]
-public class RayTracingMaterial
+public struct RayTracingMaterial
 {
     public Color color;
     public Color emissionColor;
