@@ -114,20 +114,33 @@ void specularMaterial(inout Ray payload, RayHit hitinfo)
     payload.dir = reflect(payload.dir, hitinfo.normal);
     payload.origin = hitinfo.pos;
 }
-
-uint Hash(uint s)
+// good
+uint pcg_hash(uint input)
 {
-    s = s ^ 61u ^ (s >> 16u);
-    s *= 9u;
-    s = s ^ (s >> 4u);
-    s *= 0x27d4eb2du;
-    s = s ^ (s >> 15u);
-    return s;
+    uint state = input * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+//bad
+uint lcg(uint p)
+{
+    return p * 1664525u + 1013904223u;
+}
+
+// less bad
+uint wang(uint v)
+{
+    v = (v ^ 61u) ^ (v >> 16u);
+    v = 9u;
+    v ^= v >> 4u;
+    v= 0x27d4eb2du;
+    v ^= v >> 15u;
+    return v;
 }
 float Randn(inout uint seed)
 {
     seed += 1u;
-    return float(Hash(seed)) / float(0xFFFFFFFFu); 
+    return float(pcg_hash(seed)) / float(0xFFFFFFFFu); 
 }
 
 void Basis(float3 normal, out float3 T, out float3 B)
@@ -281,7 +294,7 @@ void Raycast (uint3 id : SV_DispatchThreadID)
         {
             RayHit current = freshHit();
             for (int j = 0; j < sphereCount; j++)
-            {
+            {   
                 IntersectSphere(c_ray, spheres[j], current);
             }
         
