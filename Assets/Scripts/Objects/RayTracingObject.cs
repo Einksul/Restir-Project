@@ -5,4 +5,5 @@
 public class RayTracingObject : MonoBehaviour
 {
     public RayTracingMaterial material;
+
 }

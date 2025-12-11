@@ -136,6 +136,8 @@ public class traceinjector : MonoBehaviour
             for (int i = 0; i < _rtMeshes.Count; i++)
             {
                 _meshHandles[i].transform = _rtMeshes[i].transform.localToWorldMatrix;
+                _meshHandles[i].rtm = _rtMeshes[i].material;
+
             } 
             _meshBuffer.SetData(_meshHandles);
         }
@@ -146,6 +148,7 @@ public class traceinjector : MonoBehaviour
             {
                 _implicitsHandles[i].pos = _rtImplicits[i].transform.position;
                 _implicitsHandles[i].radius = _rtImplicits[i].transform.localScale.x;
+                _implicitsHandles[i].rtm = _rtImplicits[i].material;
             }
             _implicitsBuffer.SetData(_implicitsHandles);
         }
